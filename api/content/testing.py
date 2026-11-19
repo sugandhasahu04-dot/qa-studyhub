@@ -25,8 +25,6 @@ How software is built, step by step:
 
 <div class="viz" data-viz="sdlc"></div>
 
-
-
 **Models**
 - **Waterfall** – one step after another, testing only at the end. Slow to change.
 - **Agile** – small 2-week cycles called **sprints**. Build a little, test a little, every sprint. Most companies use this.
@@ -45,8 +43,6 @@ The tester's own process:
 6. **Test closure** – summary report: what passed, failed, open bugs, lessons learned.
 
 <div class="viz" data-viz="stlc"></div>
-
-
 
 > 💡 In interviews say: "In my current role I do test case design, execution and bug reporting."
 
@@ -110,8 +106,6 @@ The tester's own process:
 Other states: **Reopened** (fix didn't work), **Rejected** (not a bug), **Deferred** (fix later), **Duplicate**.
 
 <div class="viz" data-viz="buglife"></div>
-
-
 
 ### Severity vs Priority
 - **Severity** = how badly it breaks the system (tester decides).

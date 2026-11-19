@@ -79,8 +79,6 @@ GROUP BY module
 HAVING COUNT(*) > 1;         -- then groups
 ```
 
-
-
 <div class="viz" data-viz="groupby"></div>
 
 > **Order to remember:** `SELECT … FROM … WHERE … GROUP BY … HAVING … ORDER BY … LIMIT`
@@ -105,8 +103,6 @@ FROM employees e
 LEFT JOIN departments d ON e.department_id = d.id;
 ```
 Rahul **is** shown with department = NULL.
-
-
 
 <div class="viz" data-viz="joins"></div>
 

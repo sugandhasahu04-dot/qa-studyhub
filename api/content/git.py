@@ -27,8 +27,6 @@ Think of it as: **edit → add (put in box) → commit (seal the box with a labe
 
 <div class="viz" data-viz="git"></div>
 
-
-
 ## 3. Put it on GitHub
 1. On github.com → **New repository** → name it `qa-automation-portfolio`.
 2. Then:

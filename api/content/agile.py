@@ -26,8 +26,6 @@ Work happens in **sprints** (usually 2 weeks).
 | **Retrospective** | After review | What went well, what to improve |
 | **Backlog Refinement** | Mid-sprint | Clarify upcoming stories, acceptance criteria |
 
-
-
 <div class="viz" data-viz="sprint"></div>
 
 ### Artifacts

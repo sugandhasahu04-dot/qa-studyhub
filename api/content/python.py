@@ -66,8 +66,6 @@ for i in range(1, 6):   # 1,2,3,4,5  (end number NOT included)
 | `range(1, 6)` | 1,2,3,4,5 |
 | `range(0, 10, 2)` | 0,2,4,6,8 |
 
-
-
 <div class="viz" data-viz="forloop"></div>
 
 **Loop over a list directly:**

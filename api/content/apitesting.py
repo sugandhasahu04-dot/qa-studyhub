@@ -13,8 +13,6 @@ API testing checks the server **directly**, without the UI – faster and finds 
 
 ---
 
-
-
 <div class="viz" data-viz="http"></div>
 
 ## 1. Parts of a request

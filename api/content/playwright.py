@@ -98,8 +98,6 @@ def test_invalid_login(page: Page):
     expect(page.locator("#flash")).to_contain_text("Your username is invalid!")
 ```
 
-
-
 <div class="viz" data-viz="playwright"></div>
 
 ## 7. Page Object Model (POM)

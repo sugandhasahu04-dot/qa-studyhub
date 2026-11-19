@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit note' if note.id else 'New note' }}{% endblock %}
+{% block content %}
+<h1>{{ '✏️ Edit note' if note.id else '📝 New note' }}</h1>
+<form method="post" action="/notes/save">
+  {% if note.id %}<input type="hidden" name="id" value="{{ note.id }}">{% endif %}
+  <label>Topic</label>
+  <select name="topic">
+    <option value="general">General</option>
+    {% for t in TOPICS %}<option value="{{ t.slug }}" {{ 'selected' if note.topic == t.slug }}>{{ t.icon }} {{ t.title }}</option>{% endfor %}
+  </select>
+  <label>Title</label>
+  <input type="text" name="title" value="{{ note.title }}" placeholder="e.g. WHERE vs HAVING" required>
+  <label>Note</label>
+  <textarea name="body" class="note" placeholder="Write in your own words. Examples help you remember!">{{ note.body }}</textarea>
+  <div class="row" style="margin-top:12px">
+    <button class="btn primary">💾 Save</button>
+    <a class="btn" href="{{ '/notes/' ~ note.id if note.id else '/notes' }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

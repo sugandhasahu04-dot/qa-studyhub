@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}StudyHub{% endblock %} · QA StudyHub</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="top">
+    <div class="inner">
+      <a class="brand" href="/">📚 QA StudyHub</a>
+      <nav>
+        <a href="/" class="{{ 'active' if request.path == '/' }}">Today</a>
+        <a href="/review" class="{{ 'active' if request.path.startswith('/review') or request.path.startswith('/cards') }}">Review</a>
+        <a href="/console" class="{{ 'active' if request.path.startswith('/console') }}">Console</a>
+        <a href="/notes" class="{{ 'active' if request.path.startswith('/notes') }}">Notes</a>
+        <a href="/method" class="{{ 'active' if request.path.startswith('/method') }}">How to learn</a>
+        {% if LOCKED %}<a href="/logout">Logout</a>{% endif %}
+      </nav>
+    </div>
+  </header>
+  <main>
+    {% if TEMP_DB %}<div class="flash">⚠️ No database connected yet – your notes, cards and scores may disappear. Add a Postgres (Neon) database in Vercel → Storage, then redeploy.</div>{% endif %}
+    {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
+    {% if content_404 %}
+      <h1>Page not found</h1><p><a href="/">Go home</a></p>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

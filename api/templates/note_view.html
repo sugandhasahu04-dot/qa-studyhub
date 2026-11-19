@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ note.title }}{% endblock %}
+{% block content %}
+<p class="small"><a href="/notes">← All notes</a></p>
+<span class="pill">{{ note.topic }}</span>
+<h1>{{ note.title }}</h1>
+<div class="card note-body">{{ note.body }}</div>
+<p class="muted small">Last updated: {{ note.updated_at }}</p>
+<div class="row">
+  <a class="btn primary" href="/notes/{{ note.id }}/edit">✏️ Edit</a>
+  {% if note.topic != 'general' %}<a class="btn" href="/topic/{{ note.topic }}">📖 Open lesson</a>{% endif %}
+  <form method="post" action="/notes/{{ note.id }}/delete" onsubmit="return confirm('Delete this note?')">
+    <button class="btn danger">🗑 Delete</button>
+  </form>
+</div>
+{% endblock %}

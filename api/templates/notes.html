@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Notes{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between">
+  <h1>📝 My Notes</h1>
+  <a class="btn primary" href="/notes/new{{ '?topic=' ~ topic if topic }}">+ New note</a>
+</div>
+<form class="row" method="get" style="margin-bottom:14px">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search notes…" style="flex:2;min-width:160px">
+  <select name="topic" style="flex:1;min-width:140px" onchange="this.form.submit()">
+    <option value="">All topics</option>
+    <option value="general" {{ 'selected' if topic == 'general' }}>General</option>
+    {% for t in TOPICS %}<option value="{{ t.slug }}" {{ 'selected' if topic == t.slug }}>{{ t.title }}</option>{% endfor %}
+  </select>
+  <button class="btn">Search</button>
+</form>
+{% if notes %}
+<div class="grid">
+  {% for n in notes %}
+  <a class="card topic-card" href="/notes/{{ n.id }}">
+    <span class="pill">{{ n.topic }}</span>
+    <h3>{{ n.title }}</h3>
+    <div class="muted small">{{ (n.body or '')[:120] }}{% if (n.body or '')|length > 120 %}…{% endif %}</div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted">No notes found.</p>
+{% endif %}
+{% endblock %}

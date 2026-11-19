@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}{{ t.title }}{% endblock %}
+{% block content %}
+<p class="small"><a href="/">← All topics</a></p>
+<h1>{{ t.icon }} {{ t.title }}</h1>
+<div class="card learn-cta">
+  <div><strong>▶ Best way to study this:</strong> the guided lesson – warm-up guess, small parts, recall after each part, explain it simply, then spaced reviews.</div>
+  <div class="row" style="margin-top:8px">
+    <a class="btn primary" href="/learn/{{ t.slug }}">Start guided lesson</a>
+    {% if n_cards %}<a class="btn" href="/review?topic={{ t.slug }}">🧠 Review this topic ({{ n_cards }} cards)</a>{% endif %}
+  </div>
+</div>
+
+<div class="tabs" role="tablist">
+  <button class="active" data-tab="lesson">📖 Lesson</button>
+  <button data-tab="resources">📚 Books & Videos</button>
+  <button data-tab="quizzes">🎯 Quizzes</button>
+  <button data-tab="notes">📝 Notes ({{ notes|length }})</button>
+</div>
+
+<section id="lesson" class="tab-panel active">
+  <div class="lesson">{{ lesson | safe }}</div>
+  <form method="post" action="/topic/{{ t.slug }}/complete" class="row" style="margin-top:14px">
+    {% if done %}
+      <span class="pill ok">✓ You marked this lesson as done</span>
+      <button class="btn small">Undo</button>
+    {% else %}
+      <button class="btn primary">✓ Mark lesson as done</button>
+    {% endif %}
+    <a class="btn" href="/notes/new?topic={{ t.slug }}">📝 Write a note</a>
+  </form>
+</section>
+
+<section id="resources" class="tab-panel">
+  <div class="card">
+    <h3 style="margin-top:0">Recommended</h3>
+    <ul class="plain">
+      {% for r in t.resources %}
+      <li><a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.title }}</a><span class="muted small">{{ RESOURCE_KINDS[r.kind] }}</span></li>
+      {% endfor %}
+    </ul>
+    <h3>My resources</h3>
+    {% if user_res %}
+    <ul class="plain">
+      {% for r in user_res %}
+      <li>
+        <a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.title }}</a>
+        <span class="row"><span class="muted small">{{ RESOURCE_KINDS.get(r.kind, r.kind) }}</span>
+          <form method="post" action="/resources/{{ r.id }}/delete" onsubmit="return confirm('Remove this link?')">
+            <button class="btn small danger">✕</button></form></span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted small">Add your own PDFs (e.g. a Google Drive share link), YouTube videos or websites.</p>{% endif %}
+    <form method="post" action="/resources">
+      <input type="hidden" name="topic" value="{{ t.slug }}">
+      <label>Title</label><input type="text" name="title" placeholder="e.g. Naveen Automation Labs – Playwright playlist" required>
+      <label>Link</label><input type="url" name="url" placeholder="https://..." required>
+      <label>Type</label>
+      <select name="kind">{% for k, v in RESOURCE_KINDS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+      <p><button class="btn primary">+ Add resource</button></p>
+    </form>
+  </div>
+</section>
+
+<section id="quizzes" class="tab-panel">
+  {% for qt, label in QUIZ_TYPES.items() %}
+  <h3>{{ '🧠' if qt == 'theory' else '🛠️' }} {{ label }} quiz</h3>
+  <p class="muted small">
+    {% if qt == 'theory' %}Concepts and interview questions.
+    {% elif t.slug in ['sql', 'python'] %}Write real {{ 'SQL queries' if t.slug == 'sql' else 'Python code' }} – it runs and gets checked automatically.
+    {% else %}Real-work scenarios: what would you do?{% endif %}
+  </p>
+  <div class="levels">
+    {% for lv in LEVELS %}
+    <a class="card level-card" href="/quiz/{{ t.slug }}/{{ qt }}/{{ lv }}">
+      <div style="font-size:22px">{{ {'easy':'🟢','medium':'🟡','advanced':'🟠','expert':'🔴'}[lv] }}</div>
+      <strong>{{ lv|capitalize }}</strong>
+      <div class="muted small">{{ counts[qt][lv] }} questions</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+
+<section id="notes" class="tab-panel">
+  <p><a class="btn primary" href="/notes/new?topic={{ t.slug }}">+ New note</a></p>
+  {% if notes %}
+  <ul class="plain card">
+    {% for n in notes %}<li><a href="/notes/{{ n.id }}">{{ n.title }}</a><a class="btn small" href="/notes/{{ n.id }}/edit">Edit</a></li>{% endfor %}
+  </ul>
+  {% else %}<p class="muted">No notes for this topic yet.</p>{% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='viz.js') }}"></script>
+<script>
+  const tabs = document.querySelectorAll('.tabs button');
+  function show(name) {
+    tabs.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === name));
+  }
+  tabs.forEach(b => b.addEventListener('click', () => { show(b.dataset.tab); history.replaceState(null, '', '#' + b.dataset.tab); }));
+  if (location.hash && document.getElementById(location.hash.slice(1))) show(location.hash.slice(1));
+  initViz(document.getElementById('lesson'));
+
+  // "Try it" buttons on Python / SQL code blocks
+  document.querySelectorAll('.lesson pre > code').forEach(code => {
+    const m = (code.className || '').match(/language-(python|sql)/);
+    if (!m) return;
+    const a = document.createElement('a');
+    a.className = 'btn small try-btn';
+    a.textContent = '▶ Try it';
+    a.href = '/console?lang=' + m[1] + '#' + encodeURIComponent(code.textContent);
+    code.parentElement.appendChild(a);
+  });
+</script>
+{% endblock %}

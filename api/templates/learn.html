@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Learn {{ t.title }}{% endblock %}
+{% block content %}
+<p class="small"><a href="/topic/{{ t.slug }}">← {{ t.title }}</a> · <a href="/topic/{{ t.slug }}">read the full lesson on one page</a></p>
+<h1>{{ t.icon }} Learn: {{ t.title }}</h1>
+
+<div class="pomodoro card" id="pomo">
+  <div><strong id="pomoLabel">🍅 Focus timer</strong> <span id="pomoTime">25:00</span></div>
+  <div class="row">
+    <button class="btn small" id="pomoBtn">Start 25 min</button>
+    <button class="btn small" id="pomoReset">Reset</button>
+  </div>
+</div>
+
+<div class="stepper" id="stepper"></div>
+
+<!-- STEP: intro -->
+<section class="step card" data-title="Start">
+  <h2 style="margin-top:0">How this lesson works</h2>
+  <ol>
+    <li><strong>Warm-up guess:</strong> answer 3 questions <em>before</em> you learn. Getting them wrong is fine – guessing first makes the lesson stick better.</li>
+    <li><strong>Small chunks:</strong> read one short part at a time.</li>
+    <li><strong>Recall:</strong> after each part, the text hides and you write what you remember. This is the most important step.</li>
+    <li><strong>Explain it simply:</strong> at the end, explain the topic like you're teaching a friend.</li>
+    <li><strong>Spaced review:</strong> {{ n_cards }} flashcards are added to your <a href="/review">daily review</a> and come back on the best days so you don't forget.</li>
+  </ol>
+  <p class="muted small">Tip: put your phone on silent and press the 🍅 timer. After 25 minutes, take a 5-minute break away from the screen – your brain keeps working on the topic while you rest.</p>
+  <button class="btn primary next">Start warm-up →</button>
+</section>
+
+<!-- STEP: pretest -->
+<section class="step card" data-title="Guess">
+  <h2 style="margin-top:0">🤔 Warm-up: make your best guess</h2>
+  <p class="muted small">You haven't learned this yet – that's the point. Just guess.</p>
+  <div id="pretest"></div>
+  <button class="btn primary next" id="pretestNext" disabled>Start learning →</button>
+</section>
+
+<!-- STEPS: chunks -->
+{% for c in chunks %}
+<section class="step card chunk" data-title="{{ loop.index }}">
+  <div class="muted small">Part {{ loop.index }} of {{ chunks|length }}</div>
+  <h2 style="margin-top:4px">{{ c.title }}</h2>
+  <div class="lesson chunk-body">{{ c.html | safe }}</div>
+  <div class="recall" hidden>
+    <div class="recall-box">
+      <strong>🧠 Recall time – no peeking!</strong>
+      <p class="small">Write the key points of "<em>{{ c.title }}</em>" from memory. Short bullet points are fine. Include an example if you can.</p>
+      <textarea class="recall-text" rows="5" placeholder="What do you remember?"></textarea>
+      <button class="btn check">Compare with the lesson</button>
+    </div>
+    <div class="selfrate" hidden>
+      <p class="small"><strong>How much did you remember?</strong> (Be honest – this helps you know what to review.)</p>
+      <div class="row">
+        <button class="btn small rate" data-r="2">😀 Most of it</button>
+        <button class="btn small rate" data-r="1">🙂 Some</button>
+        <button class="btn small rate" data-r="0">😕 Very little</button>
+      </div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button class="btn primary hideit">I've read it – test my memory →</button>
+    <button class="btn primary next" hidden>Next part →</button>
+  </div>
+</section>
+{% endfor %}
+
+<!-- STEP: Feynman -->
+<section class="step card" data-title="Explain">
+  <h2 style="margin-top:0">🧒 Explain it simply</h2>
+  <p>Imagine a friend who doesn't work in IT asks you: <strong>"What is {{ t.title }} and why does it matter?"</strong></p>
+  <p class="small muted">Write 4–6 simple sentences. Use one example from <strong>your own job</strong>. If you get stuck, that's the part to re-read – that's the Feynman technique.</p>
+  <textarea id="feynman" rows="7" placeholder="{{ t.title }} is… For example, at work I…"></textarea>
+  <div class="row" style="margin-top:12px">
+    <button class="btn primary" id="finish">✓ Finish & save to my notes</button>
+  </div>
+</section>
+
+<!-- STEP: done -->
+<section class="step card" data-title="Done">
+  <h2 style="margin-top:0">🎉 Lesson complete!</h2>
+  <p id="doneMsg"></p>
+  <div id="weakParts"></div>
+  <h3>What happens next</h3>
+  <ul>
+    <li><strong>Tomorrow:</strong> your flashcards for this topic appear in <a href="/review">Review</a>. Then after ~6 days, then weeks later. Each review makes the memory last longer.</li>
+    <li><strong>Now (optional):</strong> take the Easy quiz while it's fresh.</li>
+  </ul>
+  <div class="row">
+    <a class="btn primary" href="/quiz/{{ t.slug }}/theory/easy">🎯 Easy quiz</a>
+    <a class="btn" href="/">Back to Today</a>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='runner.js') }}"></script>
+<script src="{{ url_for('static', filename='viz.js') }}"></script>
+<script>
+const SLUG = "{{ t.slug }}";
+const PRETEST = {{ pretest | tojson }};
+const steps = [...document.querySelectorAll('.step')];
+let cur = 0;
+const ratings = {};
+
+// stepper dots
+const stepper = document.getElementById('stepper');
+stepper.innerHTML = steps.map((s, i) => `<span title="${s.dataset.title}">${s.dataset.title}</span>`).join('');
+function go(i) {
+  cur = i;
+  steps.forEach((s, j) => s.hidden = j !== i);
+  [...stepper.children].forEach((d, j) => { d.className = j < i ? 'done' : j === i ? 'cur' : ''; });
+  initViz(steps[i]);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+document.querySelectorAll('.next').forEach(b => b.onclick = () => go(cur + 1));
+
+// pretest
+let answered = 0;
+document.getElementById('pretest').innerHTML = PRETEST.map((q, qi) =>
+  `<div class="pq" data-q="${qi}"><p><strong>${qi + 1}. ${escapeHtml(q.q)}</strong></p>` +
+  q.options.map((o, i) => `<button class="option" data-i="${i}">${escapeHtml(o)}</button>`).join('') + '<div class="fb"></div></div>').join('');
+document.querySelectorAll('.pq').forEach(div => {
+  const q = PRETEST[+div.dataset.q];
+  div.querySelectorAll('.option').forEach(b => b.onclick = () => {
+    if (div.dataset.done) return;
+    div.dataset.done = 1; answered++;
+    div.querySelectorAll('.option').forEach(x => { x.disabled = true; if (+x.dataset.i === q.answer) x.classList.add('correct'); else if (x === b) x.classList.add('wrong'); });
+    div.querySelector('.fb').innerHTML = `<div class="feedback ${+b.dataset.i === q.answer ? 'ok' : ''}">${+b.dataset.i === q.answer ? '✅ Nice guess!' : '👍 Good try – now you\'ll notice the answer in the lesson.'} <span class="muted">${escapeHtml(q.explain || '')}</span></div>`;
+    if (answered === PRETEST.length) document.getElementById('pretestNext').disabled = false;
+  });
+});
+if (!PRETEST.length) document.getElementById('pretestNext').disabled = false;
+
+// chunks: read -> hide -> recall -> compare -> rate
+document.querySelectorAll('.chunk').forEach((sec, idx) => {
+  const body = sec.querySelector('.chunk-body'), recall = sec.querySelector('.recall');
+  const hideBtn = sec.querySelector('.hideit'), nextBtn = sec.querySelector('.next');
+  hideBtn.onclick = () => {
+    body.hidden = true; recall.hidden = false; hideBtn.hidden = true;
+    sec.querySelector('.recall-text').focus();
+  };
+  sec.querySelector('.check').onclick = () => {
+    body.hidden = false; body.classList.add('compare');
+    sec.querySelector('.selfrate').hidden = false;
+    sec.querySelector('.check').hidden = true;
+    initViz(sec);
+  };
+  sec.querySelectorAll('.rate').forEach(b => b.onclick = () => {
+    ratings[idx] = +b.dataset.r;
+    sec.querySelectorAll('.rate').forEach(x => x.classList.toggle('primary', x === b));
+    nextBtn.hidden = false;
+  });
+});
+
+// finish
+document.getElementById('finish').onclick = async (e) => {
+  e.target.disabled = true;
+  const recalls = [...document.querySelectorAll('.chunk')].map(sec => ({
+    title: sec.querySelector('h2').textContent, text: sec.querySelector('.recall-text').value }));
+  let r = {};
+  try {
+    r = await fetch(`/api/learn/${SLUG}/finish`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ explanation: document.getElementById('feynman').value, recalls }) }).then(x => x.json());
+  } catch (err) {}
+  document.getElementById('doneMsg').textContent = (r.cards_added ? `${r.cards_added} flashcards were added to your daily review. ` : 'Your flashcards for this topic are already in your review. ') +
+    'Your recall answers and explanation are saved in Notes.';
+  const weak = [...document.querySelectorAll('.chunk')].map((s, i) => [s.querySelector('h2').textContent, ratings[i]]).filter(x => x[1] === 0);
+  if (weak.length) document.getElementById('weakParts').innerHTML =
+    '<div class="feedback bad"><strong>Parts to look at again tomorrow:</strong><ul>' + weak.map(w => '<li>' + escapeHtml(w[0]) + '</li>').join('') + '</ul></div>';
+  go(steps.length - 1);
+};
+
+// Pomodoro (25 min focus, 5 min break)
+let pomoEnd = null, pomoMode = 'focus', pomoTimer = null;
+const pt = document.getElementById('pomoTime'), pb = document.getElementById('pomoBtn'), pl = document.getElementById('pomoLabel');
+function tick() {
+  const left = Math.max(0, pomoEnd - Date.now());
+  pt.textContent = String(Math.floor(left / 60000)).padStart(2, '0') + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0');
+  if (left <= 0) {
+    clearInterval(pomoTimer); pomoTimer = null;
+    if (pomoMode === 'focus') { pomoMode = 'break'; pl.textContent = '☕ Break time! Stand up, walk, drink water.'; pb.textContent = 'Start 5 min break'; }
+    else { pomoMode = 'focus'; pl.textContent = '🍅 Focus timer'; pb.textContent = 'Start 25 min'; }
+    document.getElementById('pomo').classList.add('ring');
+    setTimeout(() => document.getElementById('pomo').classList.remove('ring'), 4000);
+  }
+}
+pb.onclick = () => {
+  if (pomoTimer) return;
+  pomoEnd = Date.now() + (pomoMode === 'focus' ? 25 : 5) * 60000;
+  pb.textContent = pomoMode === 'focus' ? 'Focusing…' : 'Resting…';
+  pomoTimer = setInterval(tick, 1000); tick();
+};
+document.getElementById('pomoReset').onclick = () => {
+  clearInterval(pomoTimer); pomoTimer = null; pomoMode = 'focus';
+  pl.textContent = '🍅 Focus timer'; pb.textContent = 'Start 25 min'; pt.textContent = '25:00';
+};
+
+go(0);
+</script>
+{% endblock %}

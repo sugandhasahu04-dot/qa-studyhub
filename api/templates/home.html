@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Today{% endblock %}
+{% block content %}
+<h1>Hi Sugandha 👋</h1>
+
+<div class="today-grid">
+  <div class="card stat">
+    <div class="big">🔥 {{ streak }}</div>
+    <div class="muted small">day streak</div>
+    <div class="week">{% for d in week %}<span class="{{ 'on' if d }}"></span>{% endfor %}</div>
+  </div>
+  <div class="card stat">
+    <div class="big">🧠 {{ due_total }}</div>
+    <div class="muted small">cards due today</div>
+    <div class="muted small">{{ reviewed_today }} reviewed today</div>
+  </div>
+</div>
+
+<div class="card plan">
+  <h3 style="margin-top:0">📋 Today's plan <span class="muted small">(about 1 hour)</span></h3>
+  <ol class="steps">
+    <li class="{{ 'done' if due_total == 0 and reviewed_today }}">
+      <strong>Review first (10 min)</strong> – recall old cards before learning new ones.
+      <div>{% if due_total %}<a class="btn primary small" href="/review">Start review ({{ due_total }})</a>
+           {% elif reviewed_today %}<span class="pill ok">✓ All reviews done</span>
+           {% else %}<span class="muted small">No cards due yet – finish a lesson to unlock cards.</span>{% endif %}</div>
+    </li>
+    <li>
+      <strong>Learn something new (25 min)</strong> – guided lesson with recall breaks.
+      <div>{% if next_topic %}<a class="btn small" href="/learn/{{ next_topic.slug }}">{{ next_topic.icon }} Learn: {{ next_topic.title }}</a>{% endif %}
+           <span class="muted small">or pick any topic below</span></div>
+    </li>
+    <li>
+      <strong>Mixed practice (10 min)</strong> – questions from different topics, shuffled.
+      <div><a class="btn small" href="/mixed">🔀 Start mixed quiz</a></div>
+    </li>
+    <li>
+      <strong>Explain it (5 min)</strong> – write a note in your own words, like teaching a friend.
+      <div><a class="btn small" href="/notes/new">📝 Write a note</a></div>
+    </li>
+  </ol>
+  <p class="muted small" style="margin-bottom:0">Why this order? <a href="/method">See how this site helps you remember</a>.</p>
+</div>
+
+<h2>Topics</h2>
+<div class="grid">
+{% for t in TOPICS %}
+  {% set ns = namespace(passed=0) %}
+  {% for qt in QUIZ_TYPES %}{% for lv in LEVELS %}
+    {% if best.get((t.slug, qt, lv), 0) >= 70 %}{% set ns.passed = ns.passed + 1 %}{% endif %}
+  {% endfor %}{% endfor %}
+  {% set m = mem.get(t.slug) %}
+  <div class="card topic-card">
+    <a href="/topic/{{ t.slug }}" class="plainlink">
+      <div class="icon">{{ t.icon }}</div>
+      <h3>{{ t.title }}</h3>
+      <div class="muted small">{{ t.summary }}</div>
+    </a>
+    <div class="small" style="margin-top:8px">
+      {% if t.slug in done %}<span class="pill ok">✓ Learned</span>{% endif %}
+      <span class="pill">{{ ns.passed }}/8 quizzes</span>
+      {% if note_counts.get(t.slug) %}<span class="pill">📝 {{ note_counts[t.slug] }}</span>{% endif %}
+    </div>
+    {% if m %}
+    <div class="memory" title="Memory strength of your flashcards">
+      <span class="m-strong" style="flex: {{ m.strong }}"></span><span class="m-growing" style="flex: {{ m.growing }}"></span><span class="m-new" style="flex: {{ m.new }}"></span>
+    </div>
+    <div class="muted small">Memory: {{ m.strong }} strong · {{ m.growing }} growing · {{ m.new }} new</div>
+    {% endif %}
+    <div class="row" style="margin-top:10px">
+      <a class="btn small {{ '' if t.slug in done else 'primary' }}" href="/learn/{{ t.slug }}">{{ '↻ Re-learn' if t.slug in done else '▶ Learn' }}</a>
+      <a class="btn small" href="/topic/{{ t.slug }}#quizzes">🎯 Quizzes</a>
+    </div>
+  </div>
+{% endfor %}
+</div>
+
+<div class="card" style="margin-top:22px">
+  <h3 style="margin-top:0">📝 Recent notes</h3>
+  {% if recent_notes %}
+  <ul class="plain">
+    {% for n in recent_notes %}
+    <li><a href="/notes/{{ n.id }}">{{ n.title }}</a><span class="muted small">{{ n.topic }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No notes yet.</p>{% endif %}
+</div>
+{% endblock %}

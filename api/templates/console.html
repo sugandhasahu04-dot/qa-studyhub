@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Console{% endblock %}
+{% block content %}
+<h1>💻 Code Console</h1>
+<p class="muted small">Runs in your browser. First run takes a few seconds to load.</p>
+
+<div class="tabs">
+  <button data-lang="python" class="active">🐍 Python</button>
+  <button data-lang="sql">🗄️ SQL</button>
+</div>
+
+<textarea id="code" class="code" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+<div class="row" style="margin:10px 0">
+  <button id="run" class="btn primary">▶ Run (Ctrl+Enter)</button>
+  <button id="clear" class="btn">Clear</button>
+  <button id="save" class="btn">📝 Save as note</button>
+  <select id="examples" style="width:auto"></select>
+</div>
+<div id="out" class="output">Output will appear here.</div>
+
+<div id="schema" class="card small" style="margin-top:14px;display:none">
+  <strong>Practice tables</strong> (reset on every run):
+  <ul>
+    <li><code>employees</code>(id, name, department_id, salary, manager_id, join_date, city)</li>
+    <li><code>departments</code>(id, name, location)</li>
+    <li><code>users</code>(id, name, email, city, signup_date)</li>
+    <li><code>orders</code>(id, user_id, product, amount, status, order_date)</li>
+    <li><code>bugs</code>(id, title, module, severity, priority, status, reported_by, created_on)</li>
+  </ul>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='runner.js') }}"></script>
+<script>
+const EXAMPLES = {
+  python: {
+    "Hello": 'name = "Sugandha"\nprint(f"Hello {name}!")',
+    "Loop 1 to 5": "for i in range(1, 6):\n    print(i)",
+    "Function": "def add(a, b):\n    return a + b\n\nprint(add(2, 5))",
+    "List & dict": 'bugs = ["login", "cart"]\nbugs.append("payment")\nuser = {"name": "Ravi", "role": "QA"}\nprint(bugs, len(bugs))\nprint(user["name"])',
+    "assert test": "def add(a, b):\n    return a + b\n\nassert add(2, 3) == 5\nprint('Test passed ✅')",
+  },
+  sql: {
+    "All employees": "SELECT * FROM employees;",
+    "WHERE": "SELECT name, salary FROM employees WHERE salary > 50000;",
+    "GROUP BY": "SELECT status, COUNT(*) AS total FROM bugs GROUP BY status;",
+    "HAVING (duplicates)": "SELECT email, COUNT(*) FROM users GROUP BY email HAVING COUNT(*) > 1;",
+    "LEFT JOIN": "SELECT e.name, d.name AS department\nFROM employees e\nLEFT JOIN departments d ON e.department_id = d.id;",
+  }
+};
+const ta = document.getElementById('code'), out = document.getElementById('out');
+const exSel = document.getElementById('examples'), schema = document.getElementById('schema');
+enableTabs(ta);
+const params = new URLSearchParams(location.search);
+let lang = params.get('lang') === 'sql' ? 'sql' : 'python';
+const store = k => 'console_' + k;
+function safeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function safeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+function setLang(l, code) {
+  lang = l;
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.lang === l));
+  ta.value = code ?? (safeGet(store(l)) || Object.values(EXAMPLES[l])[0]);
+  schema.style.display = l === 'sql' ? 'block' : 'none';
+  exSel.innerHTML = '<option value="">Examples…</option>' + Object.keys(EXAMPLES[l]).map(k => `<option>${k}</option>`).join('');
+  out.textContent = 'Output will appear here.';
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setLang(b.dataset.lang));
+exSel.onchange = () => { if (exSel.value) ta.value = EXAMPLES[lang][exSel.value]; exSel.value = ''; };
+ta.addEventListener('input', () => safeSet(store(lang), ta.value));
+
+async function run() {
+  const btn = document.getElementById('run');
+  btn.disabled = true;
+  out.textContent = lang === 'python' ? 'Running… (first time loads Python, ~5 sec)' : 'Running…';
+  try {
+    if (lang === 'python') {
+      const r = await runPython(ta.value);
+      out.innerHTML = escapeHtml(r.out || (r.ok ? '(no output – did you print()?)' : '')) +
+        (r.ok ? '' : '\n<span class="err">' + escapeHtml(r.err) + '</span>');
+    } else {
+      const r = await runSQL(ta.value);
+      out.innerHTML = r.ok ? resultsToHtml(r.results) : '<span class="err">' + escapeHtml(r.err) + '</span>';
+    }
+  } catch (e) {
+    out.innerHTML = '<span class="err">' + escapeHtml(e.message || e) + '</span>';
+  }
+  btn.disabled = false;
+}
+document.getElementById('run').onclick = run;
+document.getElementById('clear').onclick = () => { ta.value = ''; out.textContent = ''; safeSet(store(lang), ''); };
+ta.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); } });
+document.getElementById('save').onclick = () => {
+  const topic = lang === 'sql' ? 'sql' : 'python';
+  const body = '```' + lang + '\n' + ta.value + '\n```\n\nOutput:\n' + out.innerText;
+  location.href = '/notes/new?topic=' + topic + '&title=' + encodeURIComponent('Console snippet') + '&body=' + encodeURIComponent(body);
+};
+
+const fromHash = location.hash ? decodeURIComponent(location.hash.slice(1)) : null;
+setLang(lang, fromHash || undefined);
+</script>
+{% endblock %}

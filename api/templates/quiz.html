@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}{{ t.title }} quiz{% endblock %}
+{% block content %}
+{% if qtype == 'mixed' %}
+<p class="small"><a href="/">← Today</a></p>
+<h1>🔀 Mixed practice</h1>
+<p class="muted small">Questions from different topics and levels, shuffled. Mixing topics feels harder – that's why it builds stronger memory and helps you pick the right idea in a real interview.</p>
+{% else %}
+<p class="small"><a href="/topic/{{ t.slug }}#quizzes">← {{ t.title }} quizzes</a></p>
+<h1>{{ t.icon }} {{ QUIZ_TYPES[qtype] }} · {{ level|capitalize }}</h1>
+{% endif %}
+
+{% if n == 0 %}
+  <p class="muted">No questions here yet.</p>
+{% else %}
+<div class="progress-dots" id="dots"></div>
+<div class="card" id="quiz"></div>
+<div class="row" style="margin-top:12px">
+  <button class="btn primary" id="next" style="display:none">Next →</button>
+</div>
+{% endif %}
+
+{% if history %}
+<div class="card small" style="margin-top:18px">
+  <strong>Your last attempts:</strong>
+  {% for h in history %}<span class="pill {{ 'ok' if h.score * 100 / h.total >= 70 }}">{{ h.score }}/{{ h.total }}</span>{% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if n %}
+<script src="{{ url_for('static', filename='runner.js') }}"></script>
+<script>
+const QUESTIONS = {{ questions | tojson }};
+const META = { topic: "{{ t.slug }}", quiz_type: "{{ qtype }}", level: "{{ level }}" };
+const LEVELS = {{ LEVELS | tojson }};
+let idx = 0, score = 0, answered = false, gotIt = false;
+const mistakes = [];
+const box = document.getElementById('quiz'), nextBtn = document.getElementById('next'), dots = document.getElementById('dots');
+
+function drawDots() {
+  dots.innerHTML = QUESTIONS.map((_, i) => `<span class="${i < idx ? 'done' : i === idx ? 'cur' : ''}"></span>`).join('');
+}
+
+function render() {
+  answered = false; gotIt = false; nextBtn.style.display = 'none'; drawDots();
+  const q = QUESTIONS[idx];
+  const head = `<div class="muted small">Question ${idx + 1} of ${QUESTIONS.length}${q.tag ? ' · ' + escapeHtml(q.tag) : ''}</div><h3>${escapeHtml(q.q)}</h3>`;
+  if (!q.type || q.type === 'scenario') return renderMCQ(q, head);
+  return renderCode(q, head);
+}
+
+function shuffled(n) {
+  const a = [...Array(n).keys()];
+  for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+function renderMCQ(q, head) {
+  // options are shuffled each time; data-i keeps the original index
+  box.innerHTML = head + shuffled(q.options.length).map((i, pos) => `<button class="option" data-i="${i}">${String.fromCharCode(65 + pos)}. ${escapeHtml(q.options[i])}</button>`).join('') + '<div id="fb"></div>';
+  box.querySelectorAll('.option').forEach(b => b.onclick = () => {
+    if (answered) return;
+    answered = true;
+    const pick = +b.dataset.i, right = pick === q.answer;
+    if (right) { score++; gotIt = true; }
+    box.querySelectorAll('.option').forEach(x => {
+      x.disabled = true;
+      const i = +x.dataset.i;
+      if (i === q.answer) x.classList.add('correct');
+      else if (i === pick) x.classList.add('wrong');
+    });
+    document.getElementById('fb').innerHTML = `<div class="feedback ${right ? 'ok' : 'bad'}"><strong>${right ? '✅ Correct!' : '❌ Not quite.'}</strong> ${escapeHtml(q.explain || '')}</div>`;
+    showNext();
+  });
+}
+
+function renderCode(q, head) {
+  const lang = q.type;
+  box.innerHTML = head +
+    `<textarea class="code" id="ans" spellcheck="false" autocapitalize="off" autocorrect="off">${escapeHtml(q.starter || (lang === 'sql' ? 'SELECT ' : ''))}</textarea>
+     <div class="row" style="margin:10px 0">
+       <button class="btn" id="runBtn">▶ Run</button>
+       <button class="btn primary" id="checkBtn">✓ Check answer</button>
+       <button class="btn small" id="hintBtn">💡 Hint</button>
+       <button class="btn small" id="solBtn">👀 Show solution</button>
+     </div>
+     <div id="fb"></div>
+     <div class="output" id="out">Run your ${lang === 'sql' ? 'query' : 'code'} to see the output.</div>
+     ${lang === 'sql' ? '<p class="muted small">Tables: employees, departments, users, orders, bugs. <a href="/console?lang=sql" target="_blank">Open console</a></p>' : ''}`;
+  const ta = document.getElementById('ans'), out = document.getElementById('out'), fb = document.getElementById('fb');
+  enableTabs(ta);
+  let gaveUp = false;
+
+  async function execute(showOnly) {
+    out.textContent = lang === 'python' ? 'Running… (first time loads Python, ~5 sec)' : 'Running…';
+    if (lang === 'python') {
+      const code = ta.value + (showOnly ? '' : '\n\n' + (q.test || ''));
+      const r = await runPython(code);
+      out.innerHTML = escapeHtml(r.out || '') + (r.ok ? '' : '\n<span class="err">' + escapeHtml(r.err) + '</span>');
+      return r.ok && norm(r.out) === norm(q.expected);
+    } else {
+      const r = await runSQL(ta.value);
+      out.innerHTML = r.ok ? resultsToHtml(r.results) : '<span class="err">' + escapeHtml(r.err) + '</span>';
+      if (!r.ok || !r.results.length) return false;
+      const exp = await runSQL(q.solution);
+      return sameRows(last(r.results).values, last(exp.results).values, q.ordered);
+    }
+  }
+  document.getElementById('runBtn').onclick = () => execute(true);
+  document.getElementById('checkBtn').onclick = async () => {
+    const ok = await execute(false);
+    if (ok) {
+      if (!answered && !gaveUp) { score++; gotIt = true; }
+      answered = true;
+      fb.innerHTML = `<div class="feedback ok"><strong>✅ Correct!</strong> ${gaveUp ? '(not counted – you viewed the solution)' : 'Great work.'}</div>`;
+      showNext();
+    } else {
+      fb.innerHTML = `<div class="feedback bad"><strong>❌ Not yet.</strong> ${lang === 'python'
+        ? 'Expected output:<pre>' + escapeHtml(q.expected) + '</pre>'
+        : 'Your result rows don\'t match the expected result. Check filters, columns and grouping.'}</div>`;
+    }
+  };
+  document.getElementById('hintBtn').onclick = () => { fb.innerHTML = `<div class="feedback">💡 ${escapeHtml(q.hint || 'No hint')}</div>`; };
+  document.getElementById('solBtn').onclick = () => {
+    gaveUp = true;
+    fb.innerHTML = `<div class="feedback">Solution (try typing it yourself, then Check):<pre>${escapeHtml(q.solution)}</pre></div>`;
+    showNext();
+  };
+}
+
+const norm = s => String(s || '').replace(/\r/g, '').split('\n').map(l => l.trimEnd()).join('\n').trim();
+const last = a => a[a.length - 1];
+function sameRows(a, b, ordered) {
+  const key = r => JSON.stringify(r.map(v => typeof v === 'number' ? Math.round(v * 100) / 100 : v));
+  let x = a.map(key), y = b.map(key);
+  if (!ordered) { x = x.sort(); y = y.sort(); }
+  return x.length === y.length && x.every((v, i) => v === y[i]);
+}
+
+function showNext() {
+  nextBtn.style.display = 'inline-block';
+  nextBtn.textContent = idx === QUESTIONS.length - 1 ? 'See result →' : 'Next →';
+}
+
+function recordMistake() {
+  const q = QUESTIONS[idx];
+  if (gotIt) return;
+  const back = (!q.type || q.type === 'scenario') ? q.options[q.answer] + (q.explain ? '\n\n' + q.explain : '') : q.solution;
+  mistakes.push({ topic: q.topic || META.topic, front: q.q, back });
+}
+
+nextBtn.onclick = () => {
+  recordMistake();
+  idx++;
+  if (idx < QUESTIONS.length) return render();
+  finish();
+};
+
+async function finish() {
+  drawDots(); nextBtn.style.display = 'none';
+  const pct = Math.round(score * 100 / QUESTIONS.length), pass = pct >= 70;
+  const li = LEVELS.indexOf(META.level), nextLevel = LEVELS[li + 1];
+  box.innerHTML = `<h2 style="margin-top:0">${pass ? '🎉' : '💪'} You scored ${score} / ${QUESTIONS.length} (${pct}%)</h2>
+    <p>${pass ? 'Passed! ' + (nextLevel ? 'Ready for the next level.' : 'You finished the hardest level!') : 'You need 70% to pass. Re-read the lesson part you missed and try again.'}</p>
+    <div class="row">
+      <a class="btn" href="">↻ Try again</a>
+      ${pass && nextLevel && META.topic !== 'mixed' ? `<a class="btn primary" href="/quiz/${META.topic}/${META.quiz_type}/${nextLevel}">Next: ${nextLevel} →</a>` : ''}
+      ${META.topic === 'mixed' ? '<a class="btn" href="/mixed">🔀 New mixed set</a>' : `<a class="btn" href="/topic/${META.topic}">📖 Back to lesson</a>`}
+    </div>
+    ${mistakes.length ? `<div class="feedback" style="margin-top:12px">🧠 <strong>${mistakes.length} question(s) you missed were added to your <a href="/review">daily review</a></strong> – they'll come back until you know them.</div>` : ''}
+    <p class="muted small" id="saved">Saving score…</p>`;
+  if (mistakes.length) {
+    fetch('/api/cards/mistakes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: mistakes }) }).catch(() => {});
+  }
+  try {
+    const r = await fetch('/api/attempts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...META, score, total: QUESTIONS.length }) });
+    document.getElementById('saved').textContent = r.ok ? 'Score saved ✓' : 'Could not save score.';
+  } catch (e) { document.getElementById('saved').textContent = 'Could not save score (offline?).'; }
+}
+
+render();
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Review{% endblock %}
+{% block content %}
+<h1>🧠 Daily Review</h1>
+<p class="muted small">Try to <strong>remember the answer before you flip</strong>. Struggling a little is what makes memory stronger.
+Cards you know well come back after longer gaps, and cards you forget come back sooner.</p>
+
+<div class="row small" style="margin-bottom:10px">
+  <span>Filter:</span>
+  <a class="pill {{ 'ok' if not topic }}" href="/review">All topics (mixed)</a>
+  {% for t in TOPICS %}<a class="pill {{ 'ok' if topic == t.slug }}" href="/review?topic={{ t.slug }}">{{ t.icon }}</a>{% endfor %}
+  <a class="btn small" href="/cards" style="margin-left:auto">🗂 My cards</a>
+</div>
+
+{% if not cards %}
+<div class="card">
+  {% if total_cards %}
+    <h3 style="margin-top:0">🎉 Nothing due right now!</h3>
+    <p>Come back tomorrow. Spacing reviews out over days is what moves knowledge into long-term memory.</p>
+  {% else %}
+    <h3 style="margin-top:0">No cards yet</h3>
+    <p>Finish a guided lesson and its flashcards will be added here. Wrong quiz answers also become cards.</p>
+    <a class="btn primary" href="/">Go to Today</a>
+  {% endif %}
+</div>
+{% else %}
+<div class="review-progress"><span id="bar"></span></div>
+<div class="muted small" id="count"></div>
+<div class="flashcard card" id="card">
+  <div class="pill" id="tag"></div>
+  <div class="fc-front" id="front"></div>
+  <div class="fc-back" id="back" hidden></div>
+</div>
+<textarea id="attempt" class="small-ta" placeholder="Optional: type your answer first (it helps you remember)…"></textarea>
+<div id="flipRow" class="row" style="margin-top:10px">
+  <button class="btn primary" id="flip" style="flex:1">Show answer (space)</button>
+</div>
+<div id="gradeRow" class="grades" hidden>
+  <button class="g again" data-g="again">Again<small></small></button>
+  <button class="g hard" data-g="hard">Hard<small></small></button>
+  <button class="g good" data-g="good">Good<small></small></button>
+  <button class="g easy" data-g="easy">Easy<small></small></button>
+</div>
+<div id="done" class="card" hidden>
+  <h3 style="margin-top:0">🎉 Review finished!</h3>
+  <p id="summary"></p>
+  <div class="row"><a class="btn primary" href="/">Back to Today</a><a class="btn" href="/mixed">🔀 Mixed quiz</a></div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if cards %}
+<script src="{{ url_for('static', filename='runner.js') }}"></script>
+<script>
+const queue = {{ cards | tojson }};
+const total = queue.length;
+let doneCount = 0, again = 0, cur = null, flipped = false;
+const $ = id => document.getElementById(id);
+
+function fmt(s) { return escapeHtml(s).replace(/\n/g, '<br>'); }
+function isCode(s) { return /[;(){}=]|^\s*(SELECT|def |for |git |pip |page\.|pm\.)/m.test(s); }
+
+function show() {
+  if (!queue.length) return finish();
+  cur = queue.shift(); flipped = false;
+  $('tag').textContent = cur.topic_title + (cur.source === 'mistake' ? ' · ❗ from a mistake' : cur.source === 'mine' ? ' · ✍️ my card' : '');
+  $('front').innerHTML = fmt(cur.front);
+  $('back').innerHTML = isCode(cur.back) ? '<pre>' + escapeHtml(cur.back) + '</pre>' : fmt(cur.back);
+  $('back').hidden = true; $('gradeRow').hidden = true; $('flipRow').hidden = false;
+  $('attempt').value = ''; $('attempt').hidden = false;
+  document.querySelectorAll('.g small').forEach(sm => sm.textContent = cur.preview[sm.parentElement.dataset.g]);
+  $('count').textContent = `${doneCount} done · ${queue.length + 1} left`;
+  $('bar').style.width = (doneCount * 100 / total) + '%';
+}
+function flip() {
+  if (flipped || !cur) return;
+  flipped = true;
+  $('back').hidden = false; $('flipRow').hidden = true; $('gradeRow').hidden = false; $('attempt').hidden = true;
+}
+async function grade(g) {
+  if (!flipped) return;
+  const card = cur; cur = null;
+  const r = await fetch('/api/review', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ card_id: card.id, grade: g }) }).then(r => r.json()).catch(() => ({}));
+  if (r.again) {        // forgotten: see it again at the end of this session
+    again++;
+    card.preview = r.preview;
+    queue.push(card);
+  } else doneCount++;
+  show();
+}
+function finish() {
+  $('card').hidden = true; $('gradeRow').hidden = true; $('flipRow').hidden = true; $('attempt').hidden = true;
+  $('bar').style.width = '100%';
+  $('count').textContent = '';
+  $('done').hidden = false;
+  $('summary').textContent = `You reviewed ${total} card(s)` + (again ? ` and re-learned ${again} you'd forgotten.` : '.') +
+    ' Each one is now scheduled for the best day to review it again.';
+}
+$('flip').onclick = flip;
+$('card').onclick = flip;
+document.querySelectorAll('.g').forEach(b => b.onclick = () => grade(b.dataset.g));
+document.addEventListener('keydown', e => {
+  if (document.activeElement === $('attempt')) return;
+  if (e.key === ' ') { e.preventDefault(); flip(); }
+  if (flipped && ['1', '2', '3', '4'].includes(e.key)) grade(['again', 'hard', 'good', 'easy'][+e.key - 1]);
+});
+show();
+</script>
+{% endif %}
+{% endblock %}

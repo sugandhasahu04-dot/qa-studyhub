@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}My cards{% endblock %}
+{% block content %}
+<p class="small"><a href="/review">← Review</a></p>
+<h1>🗂 My Flashcards</h1>
+<p class="muted small">Writing your <strong>own</strong> cards in your own words is one of the best ways to remember (the generation effect).
+Keep each card to <strong>one idea</strong>.</p>
+
+<form class="card" method="post" action="/cards/add">
+  <label>Topic</label>
+  <select name="topic">{% for t in TOPICS %}<option value="{{ t.slug }}" {{ 'selected' if topic == t.slug }}>{{ t.icon }} {{ t.title }}</option>{% endfor %}</select>
+  <label>Front (question)</label>
+  <textarea name="front" rows="2" placeholder="e.g. What does HAVING do?" required></textarea>
+  <label>Back (answer)</label>
+  <textarea name="back" rows="3" placeholder="e.g. Filters groups after GROUP BY" required></textarea>
+  <p><button class="btn primary">+ Add card</button></p>
+</form>
+
+<div class="row small" style="margin:16px 0 8px">
+  <a class="pill {{ 'ok' if not topic }}" href="/cards">All</a>
+  {% for t in TOPICS %}<a class="pill {{ 'ok' if topic == t.slug }}" href="/cards?topic={{ t.slug }}">{{ t.icon }} {{ t.title }}</a>{% endfor %}
+</div>
+{% if cards %}
+<ul class="plain card">
+  {% for c in cards %}
+  <li>
+    <div>
+      <div><strong>{{ c.front }}</strong></div>
+      <div class="muted small note-body">{{ c.back }}</div>
+      <div class="small">
+        <span class="pill {{ 'ok' if c.strength == 'strong' }}">{{ c.strength }}</span>
+        <span class="muted">next review: {{ c.due }} · {{ c.source }}</span>
+      </div>
+    </div>
+    <form method="post" action="/cards/{{ c.id }}/delete" onsubmit="return confirm('Delete this card?')"><button class="btn small danger">✕</button></form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}<p class="muted">No cards yet.</p>{% endif %}
+{% endblock %}

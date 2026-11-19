@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}How to learn{% endblock %}
+{% block content %}
+<h1>🧠 How this site helps you never forget</h1>
+<p>Most people study by <strong>re-reading and highlighting</strong>. It feels productive, but research shows it's one of the <em>weakest</em> ways to learn.
+This site is built on the methods that scientists found work best, and every feature uses one of them.</p>
+
+<div class="viz" data-viz="forgetting"></div>
+
+<h2>The 8 methods (and where they are on this site)</h2>
+<div class="method-grid">
+  <div class="card"><h3>1. 🧠 Retrieval practice</h3>
+    <p>Pulling an answer <strong>out of your memory</strong> strengthens it far more than reading it again. Struggling a little is good: it's a "desirable difficulty".</p>
+    <p class="small muted"><strong>On this site:</strong> recall boxes after every lesson part, flashcards, quizzes.</p></div>
+  <div class="card"><h3>2. 📅 Spaced repetition</h3>
+    <p>Review just as you're about to forget – after 1 day, then ~6 days, then weeks. Each review makes the memory last longer.</p>
+    <p class="small muted"><strong>On this site:</strong> the <a href="/review">Review</a> page schedules every card with the SM-2 algorithm (the one Anki made famous). Do it daily – 10 minutes.</p></div>
+  <div class="card"><h3>3. 🔀 Interleaving</h3>
+    <p>Mix different topics in one session instead of doing one topic in a block. It's harder, but it teaches you to <em>choose</em> the right idea, which is what interviews test.</p>
+    <p class="small muted"><strong>On this site:</strong> <a href="/mixed">Mixed practice</a>, and Review shuffles all topics together.</p></div>
+  <div class="card"><h3>4. 🤔 Guess first (pretesting)</h3>
+    <p>Trying to answer questions <strong>before</strong> learning, even when you get them wrong, makes the lesson stick better afterwards.</p>
+    <p class="small muted"><strong>On this site:</strong> the warm-up guess at the start of each guided lesson.</p></div>
+  <div class="card"><h3>5. 🖼️ Dual coding</h3>
+    <p>Words + pictures create two memory paths instead of one.</p>
+    <p class="small muted"><strong>On this site:</strong> the animated diagrams (🎬) in lessons. Try drawing them yourself from memory too!</p></div>
+  <div class="card"><h3>6. 🍎 Concrete examples & elaboration</h3>
+    <p>Abstract ideas stick when tied to real examples and to what you already know. Ask yourself "why?" and "how does this connect to my job?"</p>
+    <p class="small muted"><strong>On this site:</strong> every lesson uses real testing examples; the "Explain it simply" step asks for an example from your own work.</p></div>
+  <div class="card"><h3>7. 🧒 Feynman technique</h3>
+    <p>Explain the topic in simple words as if teaching a friend. Where you get stuck shows exactly what you haven't understood yet.</p>
+    <p class="small muted"><strong>On this site:</strong> the last step of every guided lesson; saved to your Notes.</p></div>
+  <div class="card"><h3>8. 🍅 Focus + rest (chunking & Pomodoro)</h3>
+    <p>Learn in small chunks with full focus (~25 min), then take a real break. Your brain keeps connecting ideas while you rest, and <strong>sleep</strong> locks memories in.</p>
+    <p class="small muted"><strong>On this site:</strong> lessons split into parts, and the 🍅 timer in guided lessons.</p></div>
+</div>
+
+<h2>Your daily routine (1 hour)</h2>
+<ol>
+  <li><strong>Review due cards first</strong> (10 min) – grade yourself honestly.</li>
+  <li><strong>One guided lesson</strong> (25 min, one 🍅) – guess, read a part, recall, compare.</li>
+  <li><strong>5-minute break</strong> – walk, water, no phone.</li>
+  <li><strong>Mixed practice or a quiz</strong> (10 min).</li>
+  <li><strong>Explain or write a card</strong> (5 min) – in your own words.</li>
+  <li><strong>Sleep well</strong> – that's when memory is stored.</li>
+</ol>
+
+<h2>Traps to avoid</h2>
+<ul>
+  <li>❌ Re-reading notes many times: it feels familiar, but familiar ≠ remembered. <strong>Test yourself instead.</strong></li>
+  <li>❌ Cramming everything on Sunday: spread it out – a little every day beats a lot once.</li>
+  <li>❌ Watching videos without doing: always type the code yourself in the Console.</li>
+  <li>❌ Skipping reviews: if you miss a day, just do the due cards the next day – don't start over.</li>
+</ul>
+
+<h2>📚 The books & research behind this</h2>
+<ul>
+  <li><strong>Make It Stick: The Science of Successful Learning</strong> – Brown, Roediger & McDaniel (2014). The best single book on this. Key ideas: retrieval practice, spacing, interleaving, desirable difficulties.</li>
+  <li><strong>A Mind for Numbers</strong> and the free course <strong>Learning How to Learn</strong> – Barbara Oakley. Focused vs diffuse thinking, chunking, Pomodoro, recall. <a href="https://www.coursera.org/learn/learning-how-to-learn" target="_blank" rel="noopener">Coursera (free)</a></li>
+  <li><strong>Dunlosky et al. (2013)</strong>, "Improving Students' Learning With Effective Learning Techniques" – a big review of 10 study techniques. Practice testing and spaced practice were rated the most useful; highlighting and re-reading were rated low.</li>
+  <li><strong>The Learning Scientists</strong> – six strategies: spaced practice, retrieval practice, elaboration, interleaving, concrete examples, dual coding. <a href="https://www.learningscientists.org/downloadable-materials" target="_blank" rel="noopener">Free posters & guides</a></li>
+  <li><strong>Pretesting research</strong> (e.g. Richland, Kornell & Kao, 2009) – guessing before learning improves later memory, even when the guess is wrong.</li>
+  <li><strong>SM-2 algorithm</strong> – Piotr Woźniak (SuperMemo, 1987), the scheduling method used by the Review page.</li>
+</ul>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='viz.js') }}"></script>{% endblock %}

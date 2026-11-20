@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import markdown as md  # noqa: E402
 from flask import (Flask, render_template, request, redirect, url_for,  # noqa: E402
-                   session, jsonify, abort, flash)
+                   session, jsonify, abort, flash, send_from_directory)
 
 import db  # noqa: E402
 import srs  # noqa: E402
@@ -80,7 +80,7 @@ def split_lesson(markdown_text):
 def require_login():
     if not APP_PASSWORD:
         return
-    if request.endpoint in ("login", "static") or session.get("ok"):
+    if request.endpoint in ("login", "static", "service_worker", "manifest", "offline") or session.get("ok"):
         return
     if request.path.startswith("/api/"):
         return jsonify(error="login required"), 401
@@ -98,6 +98,28 @@ def login():
             return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else "/")
         error = "Wrong password"
     return render_template("login.html", error=error)
+
+
+# ---------- installable app (PWA) ----------
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+
+
+@app.route("/sw.js")
+def service_worker():
+    r = send_from_directory(STATIC_DIR, "sw.js", mimetype="application/javascript", max_age=0)
+    r.headers["Service-Worker-Allowed"] = "/"
+    r.headers["Cache-Control"] = "no-cache"
+    return r
+
+
+@app.route("/manifest.webmanifest")
+def manifest():
+    return send_from_directory(STATIC_DIR, "manifest.webmanifest", mimetype="application/manifest+json")
+
+
+@app.route("/offline")
+def offline():
+    return render_template("offline.html")
 
 
 @app.route("/logout")

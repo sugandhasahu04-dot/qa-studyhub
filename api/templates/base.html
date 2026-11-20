@@ -6,6 +6,13 @@
   <title>{% block title %}StudyHub{% endblock %} · QA StudyHub</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="StudyHub">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -18,6 +25,7 @@
         <a href="/console" class="{{ 'active' if request.path.startswith('/console') }}">Console</a>
         <a href="/notes" class="{{ 'active' if request.path.startswith('/notes') }}">Notes</a>
         <a href="/method" class="{{ 'active' if request.path.startswith('/method') }}">How to learn</a>
+        <a href="#" id="installBtn" hidden>📲 Install app</a>
         {% if LOCKED %}<a href="/logout">Logout</a>{% endif %}
       </nav>
     </div>
@@ -31,5 +39,24 @@
     {% block content %}{% endblock %}
   </main>
   {% block scripts %}{% endblock %}
+  <script>
+    // Installable app: register the service worker and show an "Install app" button when the browser allows it.
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+    (function () {
+      const btn = document.getElementById('installBtn');
+      const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+      if (standalone) return;
+      let promptEvent = null;
+      window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); promptEvent = e; btn.hidden = false; });
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      if (isIOS) btn.hidden = false;
+      btn.addEventListener('click', async e => {
+        e.preventDefault();
+        if (promptEvent) { promptEvent.prompt(); await promptEvent.userChoice; promptEvent = null; btn.hidden = true; }
+        else if (isIOS) alert('To install: tap the Share button (square with arrow) in Safari, then "Add to Home Screen".');
+      });
+      window.addEventListener('appinstalled', () => { btn.hidden = true; });
+    })();
+  </script>
 </body>
 </html>

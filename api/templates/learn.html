@@ -4,6 +4,8 @@
 <p class="small"><a href="/topic/{{ t.slug }}">← {{ t.title }}</a> · <a href="/topic/{{ t.slug }}">read the full lesson on one page</a></p>
 <h1>{{ t.icon }} Learn: {{ t.title }}</h1>
 
+<div class="learn-layout">
+<aside class="learn-side">
 <div class="pomodoro card" id="pomo">
   <div><strong id="pomoLabel">🍅 Focus timer</strong> <span id="pomoTime">25:00</span></div>
   <div class="row">
@@ -17,6 +19,8 @@
 </div>
 <div class="row" style="justify-content:space-between"><span class="muted small">Your progress saves automatically – you can close the app anytime.</span><span class="small pill" id="savedTag">Not started</span></div>
 <div class="stepper" id="stepper"></div>
+</aside>
+<div class="learn-main">
 
 <!-- STEP: intro -->
 <section class="step card" data-title="Start">
@@ -46,7 +50,7 @@
   <div class="muted small">Part {{ loop.index }} of {{ chunks|length }}</div>
   <h2 style="margin-top:4px">{{ c.title }}</h2>
   <div class="lesson chunk-body">{{ c.html | safe }}</div>
-  <div class="recall" hidden>
+  <div class="recall recall-grid" hidden>
     <div class="recall-box">
       <strong>🧠 Recall time – no peeking!</strong>
       <p class="small">Write the key points of "<em>{{ c.title }}</em>" from memory. Short bullet points are fine. Include an example if you can.</p>
@@ -100,6 +104,8 @@
     <a class="btn" href="/">Back to Today</a>
   </div>
 </section>
+</div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -121,7 +127,7 @@ let saveTimer = null, restoring = false;
 const savedTag = document.getElementById('savedTag');
 function save(now) {
   if (restoring) return;
-  state.step = cur;
+  state.step = cur; state.maxStep = maxStep;
   state.label = steps[cur].classList.contains('chunk')
     ? `Part ${chunks.indexOf(steps[cur]) + 1} of ${chunks.length}` : steps[cur].dataset.title;
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
@@ -138,11 +144,31 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 // stepper dots
 const stepper = document.getElementById('stepper');
-stepper.innerHTML = steps.map((s, i) => `<span title="${s.dataset.title}">${s.dataset.title}</span>`).join('');
+stepper.innerHTML = steps.map((s, i) => {
+  const full = s.classList.contains('chunk') ? s.querySelector('h2').textContent.replace(/^\d+\.\s*/, '') :
+    ({ Start: 'How it works', Guess: 'Warm-up guess', Explain: 'Explain it simply', Done: 'Finish' }[s.dataset.title] || s.dataset.title);
+  const ico = { Start: '▶', Guess: '?', Explain: '✎', Done: '✓' }[s.dataset.title] || s.dataset.title;
+  return `<span title="${escapeHtml(full)}" data-i="${i}"><b><span class="lbl">${s.dataset.title}</span><span class="ico">${ico}</span></b><em>${escapeHtml(full)}</em><i class="st-score"></i></span>`;
+}).join('');
+let maxStep = 0;
+stepper.addEventListener('click', e => {
+  const sp = e.target.closest('span[data-i]'); if (!sp) return;
+  const i = +sp.dataset.i;
+  if (i <= maxStep && i < steps.length - 1) go(i);   // jump back to any part you've reached
+});
+function paintScores() {
+  chunks.forEach((sec, idx) => {
+    const i = steps.indexOf(sec), r = state.scores && state.scores[idx];
+    const el = stepper.children[i] && stepper.children[i].querySelector('.st-score');
+    if (el) el.textContent = r ? r.percent + '%' : '';
+  });
+}
 function go(i, noSave) {
   cur = i;
   steps.forEach((s, j) => s.hidden = j !== i);
-  [...stepper.children].forEach((d, j) => { d.className = j < i ? 'done' : j === i ? 'cur' : ''; });
+  maxStep = Math.max(maxStep, i);
+  [...stepper.children].forEach((d, j) => { d.className = (j < i || (j <= maxStep && j !== i) ? 'done' : j === i ? 'cur' : '') + (j <= maxStep ? ' reach' : ''); });
+  paintScores();
   initViz(steps[i]);
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (!noSave && i > 0 && i < steps.length - 1) save(true);
@@ -208,6 +234,7 @@ function showResult(idx, r) {
     if (!body.hidden) initViz(sec);
   };
   sec.querySelector('.check').textContent = '↻ Check again';
+  paintScores();
   ratings[idx] = pct >= 70 ? 2 : pct >= 40 ? 1 : 0;
   sec.querySelector('.next').hidden = false;
   save();
@@ -256,6 +283,7 @@ function restore(src) {
   if (src.feynman) { document.getElementById('feynman').value = src.feynman; state.feynman = src.feynman; }
   restoring = false;
   const step = Math.min(Math.max(0, src.step || 0), steps.length - 2);
+  maxStep = Math.max(step, Math.min(src.maxStep || 0, steps.length - 2));
   go(step, true);
   savedTag.textContent = '✓ Progress saved';
   if (step > 0) {

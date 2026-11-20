@@ -19,7 +19,10 @@
 </div>
 
 <section id="lesson" class="tab-panel active">
+  <div class="lesson-layout">
+  <nav class="toc card" id="toc"><strong>In this lesson</strong></nav>
   <div class="lesson">{{ lesson | safe }}</div>
+  </div>
   <form method="post" action="/topic/{{ t.slug }}/complete" class="row" style="margin-top:14px">
     {% if done %}
       <span class="pill ok">✓ You marked this lesson as done</span>
@@ -104,6 +107,14 @@
   tabs.forEach(b => b.addEventListener('click', () => { show(b.dataset.tab); history.replaceState(null, '', '#' + b.dataset.tab); }));
   if (location.hash && document.getElementById(location.hash.slice(1))) show(location.hash.slice(1));
   initViz(document.getElementById('lesson'));
+  // table of contents (shown as a sidebar on wide screens)
+  const toc = document.getElementById('toc');
+  document.querySelectorAll('.lesson h2').forEach((h, i) => {
+    h.id = 'part-' + i;
+    const a = document.createElement('a'); a.href = '#part-' + i; a.textContent = h.textContent;
+    a.onclick = e => { e.preventDefault(); h.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    toc.appendChild(a);
+  });
 
   // "Try it" buttons on Python / SQL code blocks
   document.querySelectorAll('.lesson pre > code').forEach(code => {

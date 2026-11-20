@@ -1,7 +1,7 @@
 // QA StudyHub service worker: makes the site installable and usable with a weak connection.
 // Pages: network first (always fresh data), fall back to the last saved copy, then an offline page.
-// Static files (CSS, JS, icons): cache first.
-const VERSION = 'studyhub-v1';
+// Static files (CSS, JS, icons): served from cache instantly, refreshed in the background (stale-while-revalidate).
+const VERSION = 'studyhub-v2';
 const STATIC = ['/static/style.css', '/static/runner.js', '/static/viz.js', '/static/sample_db.sql',
   '/static/icons/icon-192.png', '/offline'];
 
@@ -20,10 +20,13 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
 
   if (url.pathname.startsWith('/static/')) {
-    e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {
-      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
-      return res;
-    })));
+    e.respondWith(caches.match(req).then(hit => {
+      const fresh = fetch(req).then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
+        return res;
+      }).catch(() => hit);
+      return hit || fresh;
+    }));
     return;
   }
 

@@ -12,6 +12,10 @@
   </div>
 </div>
 
+<div class="card feedback ok" id="resumeBanner" hidden style="margin-bottom:10px">
+  <span></span> <a href="#" id="startOver" class="small">Start over</a>
+</div>
+<div class="row" style="justify-content:space-between"><span class="muted small">Your progress saves automatically – you can close the app anytime.</span><span class="small pill" id="savedTag">Not started</span></div>
 <div class="stepper" id="stepper"></div>
 
 <!-- STEP: intro -->
@@ -98,60 +102,122 @@
 <script src="{{ url_for('static', filename='viz.js') }}"></script>
 <script>
 const SLUG = "{{ t.slug }}";
-const PRETEST = {{ pretest | tojson }};
+const SAVED = {{ saved | tojson }};
+const PRETEST = (SAVED && Array.isArray(SAVED.pretest) && SAVED.pretest.length) ? SAVED.pretest : {{ pretest | tojson }};
 const steps = [...document.querySelectorAll('.step')];
+const chunks = [...document.querySelectorAll('.chunk')];
 let cur = 0;
 const ratings = {};
+
+// ---------- auto-save (server + this phone as backup) ----------
+const state = { pretest: PRETEST, step: 0, answers: {}, phases: {}, recalls: {}, ratings, feynman: '', label: '' };
+const LS_KEY = 'learn_' + SLUG;
+let saveTimer = null, restoring = false;
+const savedTag = document.getElementById('savedTag');
+function save(now) {
+  if (restoring) return;
+  state.step = cur;
+  state.label = steps[cur].classList.contains('chunk')
+    ? `Part ${chunks.indexOf(steps[cur]) + 1} of ${chunks.length}` : steps[cur].dataset.title;
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    savedTag.textContent = 'Saving…';
+    fetch(`/api/learn/${SLUG}/state`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state), keepalive: true })
+      .then(r => { savedTag.textContent = r.ok ? '✓ Progress saved' : '⚠️ Not saved'; })
+      .catch(() => { savedTag.textContent = '⚠️ Offline – saved on this phone'; });
+  }, now ? 0 : 700);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && cur > 0 && cur < steps.length - 1) save(true); });
 
 // stepper dots
 const stepper = document.getElementById('stepper');
 stepper.innerHTML = steps.map((s, i) => `<span title="${s.dataset.title}">${s.dataset.title}</span>`).join('');
-function go(i) {
+function go(i, noSave) {
   cur = i;
   steps.forEach((s, j) => s.hidden = j !== i);
   [...stepper.children].forEach((d, j) => { d.className = j < i ? 'done' : j === i ? 'cur' : ''; });
   initViz(steps[i]);
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (!noSave && i > 0 && i < steps.length - 1) save(true);
 }
 document.querySelectorAll('.next').forEach(b => b.onclick = () => go(cur + 1));
 
-// pretest
+// ---------- pretest ----------
 let answered = 0;
 document.getElementById('pretest').innerHTML = PRETEST.map((q, qi) =>
   `<div class="pq" data-q="${qi}"><p><strong>${qi + 1}. ${escapeHtml(q.q)}</strong></p>` +
   q.options.map((o, i) => `<button class="option" data-i="${i}">${escapeHtml(o)}</button>`).join('') + '<div class="fb"></div></div>').join('');
-document.querySelectorAll('.pq').forEach(div => {
+function answerPre(div, pick) {
   const q = PRETEST[+div.dataset.q];
-  div.querySelectorAll('.option').forEach(b => b.onclick = () => {
-    if (div.dataset.done) return;
-    div.dataset.done = 1; answered++;
-    div.querySelectorAll('.option').forEach(x => { x.disabled = true; if (+x.dataset.i === q.answer) x.classList.add('correct'); else if (x === b) x.classList.add('wrong'); });
-    div.querySelector('.fb').innerHTML = `<div class="feedback ${+b.dataset.i === q.answer ? 'ok' : ''}">${+b.dataset.i === q.answer ? '✅ Nice guess!' : '👍 Good try – now you\'ll notice the answer in the lesson.'} <span class="muted">${escapeHtml(q.explain || '')}</span></div>`;
-    if (answered === PRETEST.length) document.getElementById('pretestNext').disabled = false;
-  });
-});
+  if (div.dataset.done) return;
+  div.dataset.done = 1; answered++;
+  state.answers[div.dataset.q] = pick;
+  div.querySelectorAll('.option').forEach(x => { x.disabled = true; if (+x.dataset.i === q.answer) x.classList.add('correct'); else if (+x.dataset.i === pick) x.classList.add('wrong'); });
+  div.querySelector('.fb').innerHTML = `<div class="feedback ${pick === q.answer ? 'ok' : ''}">${pick === q.answer ? '✅ Nice guess!' : '👍 Good try – now you\'ll notice the answer in the lesson.'} <span class="muted">${escapeHtml(q.explain || '')}</span></div>`;
+  if (answered === PRETEST.length) document.getElementById('pretestNext').disabled = false;
+  save();
+}
+document.querySelectorAll('.pq').forEach(div => div.querySelectorAll('.option').forEach(b => b.onclick = () => answerPre(div, +b.dataset.i)));
 if (!PRETEST.length) document.getElementById('pretestNext').disabled = false;
 
-// chunks: read -> hide -> recall -> compare -> rate
-document.querySelectorAll('.chunk').forEach((sec, idx) => {
-  const body = sec.querySelector('.chunk-body'), recall = sec.querySelector('.recall');
-  const hideBtn = sec.querySelector('.hideit'), nextBtn = sec.querySelector('.next');
-  hideBtn.onclick = () => {
-    body.hidden = true; recall.hidden = false; hideBtn.hidden = true;
-    sec.querySelector('.recall-text').focus();
-  };
-  sec.querySelector('.check').onclick = () => {
+// ---------- chunks: read (0) -> recall (1) -> compared (2) -> rated ----------
+function setPhase(idx, phase) {
+  const sec = chunks[idx], body = sec.querySelector('.chunk-body'), recall = sec.querySelector('.recall');
+  state.phases[idx] = phase;
+  if (phase >= 1) { body.hidden = true; recall.hidden = false; sec.querySelector('.hideit').hidden = true; }
+  if (phase >= 2) {
     body.hidden = false; body.classList.add('compare');
-    sec.querySelector('.selfrate').hidden = false;
-    sec.querySelector('.check').hidden = true;
+    sec.querySelector('.selfrate').hidden = false; sec.querySelector('.check').hidden = true;
     initViz(sec);
-  };
-  sec.querySelectorAll('.rate').forEach(b => b.onclick = () => {
-    ratings[idx] = +b.dataset.r;
-    sec.querySelectorAll('.rate').forEach(x => x.classList.toggle('primary', x === b));
-    nextBtn.hidden = false;
-  });
+  }
+  save();
+}
+function rate(idx, r) {
+  const sec = chunks[idx];
+  ratings[idx] = r;
+  sec.querySelectorAll('.rate').forEach(x => x.classList.toggle('primary', +x.dataset.r === r));
+  sec.querySelector('.next').hidden = false;
+  save();
+}
+chunks.forEach((sec, idx) => {
+  sec.querySelector('.hideit').onclick = () => { setPhase(idx, 1); sec.querySelector('.recall-text').focus(); };
+  sec.querySelector('.check').onclick = () => setPhase(idx, 2);
+  sec.querySelectorAll('.rate').forEach(b => b.onclick = () => rate(idx, +b.dataset.r));
+  sec.querySelector('.recall-text').addEventListener('input', e => { state.recalls[idx] = e.target.value; save(); });
 });
+document.getElementById('feynman').addEventListener('input', e => { state.feynman = e.target.value; save(); });
+
+// ---------- restore saved progress ----------
+function restore(src) {
+  restoring = true;
+  Object.entries(src.answers || {}).forEach(([qi, pick]) => {
+    const div = document.querySelector(`.pq[data-q="${qi}"]`); if (div) answerPre(div, pick);
+  });
+  Object.entries(src.recalls || {}).forEach(([i, txt]) => {
+    if (chunks[i]) { chunks[i].querySelector('.recall-text').value = txt; state.recalls[i] = txt; }
+  });
+  Object.entries(src.phases || {}).forEach(([i, ph]) => { if (chunks[i]) setPhase(+i, ph); });
+  Object.entries(src.ratings || {}).forEach(([i, r]) => { if (chunks[i]) rate(+i, r); });
+  if (src.feynman) { document.getElementById('feynman').value = src.feynman; state.feynman = src.feynman; }
+  restoring = false;
+  const step = Math.min(Math.max(0, src.step || 0), steps.length - 2);
+  go(step, true);
+  savedTag.textContent = '✓ Progress saved';
+  if (step > 0) {
+    const banner = document.getElementById('resumeBanner');
+    banner.hidden = false;
+    banner.querySelector('span').textContent = `👋 Welcome back – you were at: ${src.label || 'step ' + step}.`;
+  }
+}
+document.getElementById('startOver').onclick = async e => {
+  e.preventDefault();
+  if (!confirm('Start this lesson again from the beginning? Your saved answers for it will be cleared.')) return;
+  try { localStorage.removeItem(LS_KEY); } catch (err) {}
+  await fetch(`/api/learn/${SLUG}/reset`, { method: 'POST' }).catch(() => {});
+  location.reload();
+};
 
 // finish
 document.getElementById('finish').onclick = async (e) => {
@@ -163,6 +229,7 @@ document.getElementById('finish').onclick = async (e) => {
     r = await fetch(`/api/learn/${SLUG}/finish`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ explanation: document.getElementById('feynman').value, recalls }) }).then(x => x.json());
   } catch (err) {}
+  try { localStorage.removeItem(LS_KEY); } catch (err) {}
   document.getElementById('doneMsg').textContent = (r.cards_added ? `${r.cards_added} flashcards were added to your daily review. ` : 'Your flashcards for this topic are already in your review. ') +
     'Your recall answers and explanation are saved in Notes.';
   const weak = [...document.querySelectorAll('.chunk')].map((s, i) => [s.querySelector('h2').textContent, ratings[i]]).filter(x => x[1] === 0);
@@ -196,6 +263,11 @@ document.getElementById('pomoReset').onclick = () => {
   pl.textContent = '🍅 Focus timer'; pb.textContent = 'Start 25 min'; pt.textContent = '25:00';
 };
 
-go(0);
+(function () {
+  let local = null;
+  try { local = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {}
+  const src = SAVED || local;   // server copy first (works across devices), phone copy as backup
+  if (src && (src.step || 0) > 0) restore(src); else go(0, true);
+})();
 </script>
 {% endblock %}

@@ -1,6 +1,7 @@
 import os
 import sys
 import hmac
+import json
 import random
 import hashlib
 from datetime import timedelta
@@ -157,10 +158,18 @@ def home():
     days = {r["day"] for r in db.query("SELECT day FROM activity")}
     reviewed_today = db.query("SELECT COUNT(*) AS n FROM reviews WHERE day = ?", (today,), one=True)["n"]
     next_topic = next((t for t in TOPICS if t["slug"] not in done), None)
+    in_progress = []
+    for r in db.query("SELECT topic, state FROM learn_state ORDER BY updated_at DESC"):
+        if r["topic"] in BY_SLUG:
+            try:
+                st = json.loads(r["state"])
+            except ValueError:
+                continue
+            in_progress.append({"t": BY_SLUG[r["topic"]], "label": st.get("label", "")})
     return render_template("home.html", best=best, done=done, note_counts=note_counts,
                            recent_notes=recent_notes, due_total=due_total, mem=mem,
                            streak=srs.streak(days), studied_today=today in days,
-                           reviewed_today=reviewed_today, next_topic=next_topic,
+                           reviewed_today=reviewed_today, next_topic=next_topic, in_progress=in_progress,
                            week=[(srs.today() - timedelta(days=i)).isoformat() in days
                                  for i in range(6, -1, -1)])
 
@@ -332,8 +341,39 @@ def learn(slug):
     t = get_topic(slug)
     pool = t["theory"].get("easy", []) + t["theory"].get("medium", [])
     pretest = random.sample(pool, min(3, len(pool)))
+    saved = None
+    row = db.query("SELECT state FROM learn_state WHERE topic = ?", (slug,), one=True)
+    if row:
+        try:
+            saved = json.loads(row["state"])
+        except ValueError:
+            saved = None
     return render_template("learn.html", t=t, chunks=split_lesson(t["lesson"]), pretest=pretest,
-                           n_cards=len(CARDS.get(slug, [])))
+                           n_cards=len(CARDS.get(slug, [])), saved=saved)
+
+
+@app.post("/api/learn/<slug>/state")
+def learn_save_state(slug):
+    """Auto-save of guided-lesson progress (step, guesses, recall answers, ratings, explanation)."""
+    get_topic(slug)
+    raw = request.get_data(as_text=True) or ""
+    if len(raw) > 100_000:
+        return jsonify(error="too large"), 413
+    try:
+        json.loads(raw)
+    except ValueError:
+        return jsonify(error="bad json"), 400
+    db.execute("INSERT INTO learn_state (topic, state) VALUES (?, ?) "
+               "ON CONFLICT (topic) DO UPDATE SET state = excluded.state, updated_at = CURRENT_TIMESTAMP",
+               (slug, raw))
+    return jsonify(ok=True)
+
+
+@app.post("/api/learn/<slug>/reset")
+def learn_reset_state(slug):
+    get_topic(slug)
+    db.execute("DELETE FROM learn_state WHERE topic = ?", (slug,))
+    return jsonify(ok=True)
 
 
 @app.post("/api/learn/<slug>/finish")
@@ -352,6 +392,7 @@ def learn_finish(slug):
         db.execute("INSERT INTO notes (topic, title, body) VALUES (?, ?, ?)",
                    (slug, f"{t['title']} – what I learned ({srs.today().strftime('%d %b')})", body.strip()))
     db.execute("INSERT INTO lesson_progress (topic) VALUES (?) ON CONFLICT (topic) DO NOTHING", (slug,))
+    db.execute("DELETE FROM learn_state WHERE topic = ?", (slug,))
     added = seed_cards(slug)
     mark_active()
     return jsonify(ok=True, cards_added=added)

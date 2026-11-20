@@ -78,6 +78,12 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS activity (
         day TEXT PRIMARY KEY
     )""",
+    # Where you are inside a guided lesson, so you can stop and resume on any device.
+    f"""CREATE TABLE IF NOT EXISTS learn_state (
+        topic TEXT PRIMARY KEY,
+        state TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT {NOW}
+    )""",
 ]
 
 _initialized = False

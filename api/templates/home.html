@@ -16,6 +16,18 @@
   </div>
 </div>
 
+{% if in_progress %}
+<div class="card learn-cta" style="margin-bottom:14px">
+  <strong>⏸ Continue where you left off</strong>
+  {% for p in in_progress %}
+  <div class="row" style="margin-top:8px">
+    <a class="btn primary small" href="/learn/{{ p.t.slug }}">▶ {{ p.t.icon }} {{ p.t.title }}</a>
+    <span class="muted small">{{ p.label }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="card plan">
   <h3 style="margin-top:0">📋 Today's plan <span class="muted small">(about 1 hour)</span></h3>
   <ol class="steps">

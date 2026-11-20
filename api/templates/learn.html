@@ -24,7 +24,7 @@
   <ol>
     <li><strong>Warm-up guess:</strong> answer 3 questions <em>before</em> you learn. Getting them wrong is fine – guessing first makes the lesson stick better.</li>
     <li><strong>Small chunks:</strong> read one short part at a time.</li>
-    <li><strong>Recall:</strong> after each part, the text hides and you write what you remember. This is the most important step.</li>
+    <li><strong>Recall:</strong> after each part, the text hides and you write what you remember. The site then checks it and shows <strong>what % of the key points</strong> you got, and what you missed. This is the most important step.</li>
     <li><strong>Explain it simply:</strong> at the end, explain the topic like you're teaching a friend.</li>
     <li><strong>Spaced review:</strong> {{ n_cards }} flashcards are added to your <a href="/review">daily review</a> and come back on the best days so you don't forget.</li>
   </ol>
@@ -42,7 +42,7 @@
 
 <!-- STEPS: chunks -->
 {% for c in chunks %}
-<section class="step card chunk" data-title="{{ loop.index }}">
+<section class="step card chunk" data-title="{{ loop.index }}" data-scored="{{ 1 if c.scored else 0 }}">
   <div class="muted small">Part {{ loop.index }} of {{ chunks|length }}</div>
   <h2 style="margin-top:4px">{{ c.title }}</h2>
   <div class="lesson chunk-body">{{ c.html | safe }}</div>
@@ -51,8 +51,13 @@
       <strong>🧠 Recall time – no peeking!</strong>
       <p class="small">Write the key points of "<em>{{ c.title }}</em>" from memory. Short bullet points are fine. Include an example if you can.</p>
       <textarea class="recall-text" rows="5" placeholder="What do you remember?"></textarea>
+      {% if c.scored %}
+      <button class="btn primary check">✓ Check my answer</button>
+      {% else %}
       <button class="btn check">Compare with the lesson</button>
+      {% endif %}
     </div>
+    <div class="result" hidden></div>
     <div class="selfrate" hidden>
       <p class="small"><strong>How much did you remember?</strong> (Be honest – this helps you know what to review.)</p>
       <div class="row">
@@ -162,17 +167,62 @@ function answerPre(div, pick) {
 document.querySelectorAll('.pq').forEach(div => div.querySelectorAll('.option').forEach(b => b.onclick = () => answerPre(div, +b.dataset.i)));
 if (!PRETEST.length) document.getElementById('pretestNext').disabled = false;
 
-// ---------- chunks: read (0) -> recall (1) -> compared (2) -> rated ----------
+// ---------- chunks: read (0) -> recall (1) -> checked (2) ----------
+// Scored parts: your answer is checked against the part's key points (% + what you missed).
+// Unscored parts: compare with the lesson and rate yourself.
+state.scores = {};
+const isScored = sec => sec.dataset.scored === '1';
 function setPhase(idx, phase) {
   const sec = chunks[idx], body = sec.querySelector('.chunk-body'), recall = sec.querySelector('.recall');
   state.phases[idx] = phase;
   if (phase >= 1) { body.hidden = true; recall.hidden = false; sec.querySelector('.hideit').hidden = true; }
-  if (phase >= 2) {
+  if (phase >= 2 && !isScored(sec)) {
     body.hidden = false; body.classList.add('compare');
     sec.querySelector('.selfrate').hidden = false; sec.querySelector('.check').hidden = true;
     initViz(sec);
   }
   save();
+}
+function showResult(idx, r) {
+  const sec = chunks[idx], box = sec.querySelector('.result'), body = sec.querySelector('.chunk-body');
+  state.scores[idx] = r;
+  const pct = r.percent, cls = pct >= 70 ? 'good' : pct >= 40 ? 'mid' : 'low';
+  const msg = pct >= 90 ? '🌟 Excellent recall!' : pct >= 70 ? '😀 Great – you remembered most of it.' :
+              pct >= 40 ? '🙂 Good start – add what you missed and check again.' : '💪 Keep going – read the missed points, then try again.';
+  box.innerHTML = `
+    <div class="score-head"><div class="score-num ${cls}">${pct}%</div>
+      <div><strong>${msg}</strong><div class="muted small">${r.hits.length} of ${r.total} key points</div></div></div>
+    <div class="score-bar"><span class="${cls}" style="width:${pct}%"></span></div>
+    ${r.hits.length ? `<div class="kp ok"><strong>✅ You remembered</strong><ul>${r.hits.map(h => `<li>${escapeHtml(h)}</li>`).join('')}</ul></div>` : ''}
+    ${r.misses.length ? `<div class="kp miss"><strong>❌ You missed</strong><ul>${r.misses.map(h => `<li>${escapeHtml(h)}</li>`).join('')}</ul></div>` : ''}
+    <div class="row" style="margin-top:10px">
+      ${r.misses.length ? '<button class="btn small retry">✏️ Add more & check again</button>' : ''}
+      <button class="btn small showlesson">📖 ${body.hidden ? 'Show' : 'Hide'} the lesson</button>
+    </div>`;
+  box.hidden = false;
+  const retry = box.querySelector('.retry');
+  if (retry) retry.onclick = () => { const ta = sec.querySelector('.recall-text'); ta.focus(); ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+  box.querySelector('.showlesson').onclick = e => {
+    body.hidden = !body.hidden; body.classList.add('compare');
+    e.target.textContent = `📖 ${body.hidden ? 'Show' : 'Hide'} the lesson`;
+    if (!body.hidden) initViz(sec);
+  };
+  sec.querySelector('.check').textContent = '↻ Check again';
+  ratings[idx] = pct >= 70 ? 2 : pct >= 40 ? 1 : 0;
+  sec.querySelector('.next').hidden = false;
+  save();
+}
+async function checkAnswer(idx) {
+  const sec = chunks[idx], text = sec.querySelector('.recall-text').value.trim(), btn = sec.querySelector('.check');
+  if (!text) { sec.querySelector('.recall-text').focus(); btn.textContent = '✍️ Write something first'; return; }
+  btn.disabled = true; btn.textContent = 'Checking…';
+  try {
+    const r = await fetch(`/api/learn/${SLUG}/check`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ part: idx, text }) }).then(x => x.json());
+    if (r && typeof r.percent === 'number') { state.phases[idx] = 2; showResult(idx, r); }
+    else btn.textContent = '⚠️ Could not check – try again';
+  } catch (e) { btn.textContent = '⚠️ Offline – try again'; }
+  btn.disabled = false;
 }
 function rate(idx, r) {
   const sec = chunks[idx];
@@ -183,11 +233,13 @@ function rate(idx, r) {
 }
 chunks.forEach((sec, idx) => {
   sec.querySelector('.hideit').onclick = () => { setPhase(idx, 1); sec.querySelector('.recall-text').focus(); };
-  sec.querySelector('.check').onclick = () => setPhase(idx, 2);
+  sec.querySelector('.check').onclick = () => isScored(sec) ? checkAnswer(idx) : setPhase(idx, 2);
   sec.querySelectorAll('.rate').forEach(b => b.onclick = () => rate(idx, +b.dataset.r));
   sec.querySelector('.recall-text').addEventListener('input', e => { state.recalls[idx] = e.target.value; save(); });
 });
 document.getElementById('feynman').addEventListener('input', e => { state.feynman = e.target.value; save(); });
+
+function avgClass(a) { const v = a.reduce((x, y) => x + y, 0) / a.length; return v >= 70 ? 'good' : v >= 40 ? 'mid' : 'low'; }
 
 // ---------- restore saved progress ----------
 function restore(src) {
@@ -199,7 +251,8 @@ function restore(src) {
     if (chunks[i]) { chunks[i].querySelector('.recall-text').value = txt; state.recalls[i] = txt; }
   });
   Object.entries(src.phases || {}).forEach(([i, ph]) => { if (chunks[i]) setPhase(+i, ph); });
-  Object.entries(src.ratings || {}).forEach(([i, r]) => { if (chunks[i]) rate(+i, r); });
+  Object.entries(src.ratings || {}).forEach(([i, r]) => { if (chunks[i] && !isScored(chunks[i])) rate(+i, r); });
+  Object.entries(src.scores || {}).forEach(([i, r]) => { if (chunks[i] && isScored(chunks[i]) && r && typeof r.percent === 'number') showResult(+i, r); });
   if (src.feynman) { document.getElementById('feynman').value = src.feynman; state.feynman = src.feynman; }
   restoring = false;
   const step = Math.min(Math.max(0, src.step || 0), steps.length - 2);
@@ -222,8 +275,9 @@ document.getElementById('startOver').onclick = async e => {
 // finish
 document.getElementById('finish').onclick = async (e) => {
   e.target.disabled = true;
-  const recalls = [...document.querySelectorAll('.chunk')].map(sec => ({
-    title: sec.querySelector('h2').textContent, text: sec.querySelector('.recall-text').value }));
+  const recalls = chunks.map((sec, i) => ({
+    title: sec.querySelector('h2').textContent, text: sec.querySelector('.recall-text').value,
+    score: state.scores[i] ? state.scores[i].percent : null, missed: state.scores[i] ? state.scores[i].misses : [] }));
   let r = {};
   try {
     r = await fetch(`/api/learn/${SLUG}/finish`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -232,6 +286,9 @@ document.getElementById('finish').onclick = async (e) => {
   try { localStorage.removeItem(LS_KEY); } catch (err) {}
   document.getElementById('doneMsg').textContent = (r.cards_added ? `${r.cards_added} flashcards were added to your daily review. ` : 'Your flashcards for this topic are already in your review. ') +
     'Your recall answers and explanation are saved in Notes.';
+  const sc = Object.values(state.scores).map(r => r.percent);
+  if (sc.length) document.getElementById('doneMsg').insertAdjacentHTML('beforebegin',
+    `<div class="score-head" style="margin-bottom:10px"><div class="score-num ${avgClass(sc)}">${Math.round(sc.reduce((a, b) => a + b, 0) / sc.length)}%</div><div><strong>Your average recall score</strong><div class="muted small">across ${sc.length} parts</div></div></div>`);
   const weak = [...document.querySelectorAll('.chunk')].map((s, i) => [s.querySelector('h2').textContent, ratings[i]]).filter(x => x[1] === 0);
   if (weak.length) document.getElementById('weakParts').innerHTML =
     '<div class="feedback bad"><strong>Parts to look at again tomorrow:</strong><ul>' + weak.map(w => '<li>' + escapeHtml(w[0]) + '</li>').join('') + '</ul></div>';

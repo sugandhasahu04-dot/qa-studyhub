@@ -15,6 +15,8 @@ from flask import (Flask, render_template, request, redirect, url_for,  # noqa: 
 
 import db  # noqa: E402
 import srs  # noqa: E402
+import recall as recall_check  # noqa: E402
+from content.keypoints import KEYPOINTS  # noqa: E402
 from content import TOPICS, BY_SLUG, LEVELS, CARDS  # noqa: E402
 
 app = Flask(__name__)
@@ -348,7 +350,11 @@ def learn(slug):
             saved = json.loads(row["state"])
         except ValueError:
             saved = None
-    return render_template("learn.html", t=t, chunks=split_lesson(t["lesson"]), pretest=pretest,
+    chunks = split_lesson(t["lesson"])
+    kp = KEYPOINTS.get(slug, [])
+    for i, c in enumerate(chunks):
+        c["scored"] = bool(i < len(kp) and kp[i])
+    return render_template("learn.html", t=t, chunks=chunks, pretest=pretest,
                            n_cards=len(CARDS.get(slug, [])), saved=saved)
 
 
@@ -367,6 +373,21 @@ def learn_save_state(slug):
                "ON CONFLICT (topic) DO UPDATE SET state = excluded.state, updated_at = CURRENT_TIMESTAMP",
                (slug, raw))
     return jsonify(ok=True)
+
+
+@app.post("/api/learn/<slug>/check")
+def learn_check(slug):
+    """Score a recall answer: % of the part's key points you wrote, plus what you missed."""
+    get_topic(slug)
+    data = request.get_json(silent=True) or {}
+    try:
+        part = int(data.get("part", -1))
+    except (TypeError, ValueError):
+        return jsonify(error="bad part"), 400
+    kp = KEYPOINTS.get(slug, [])
+    if not 0 <= part < len(kp) or not kp[part]:
+        return jsonify(error="this part is not scored"), 400
+    return jsonify(recall_check.score(str(data.get("text", ""))[:5000], kp[part]))
 
 
 @app.post("/api/learn/<slug>/reset")
@@ -388,7 +409,11 @@ def learn_finish(slug):
             body += "🧒 My simple explanation (Feynman):\n" + explanation + "\n\n"
         for r in recalls:
             if str(r.get("text", "")).strip():
-                body += f"🧠 Recall – {r.get('title', '')}:\n{str(r['text']).strip()}\n\n"
+                sc = f" ({r['score']}% of key points)" if isinstance(r.get("score"), int) else ""
+                body += f"🧠 Recall – {r.get('title', '')}{sc}:\n{str(r['text']).strip()}\n"
+                if r.get("missed"):
+                    body += "Missed: " + "; ".join(str(m) for m in r["missed"][:12]) + "\n"
+                body += "\n"
         db.execute("INSERT INTO notes (topic, title, body) VALUES (?, ?, ?)",
                    (slug, f"{t['title']} – what I learned ({srs.today().strftime('%d %b')})", body.strip()))
     db.execute("INSERT INTO lesson_progress (topic) VALUES (?) ON CONFLICT (topic) DO NOTHING", (slug,))

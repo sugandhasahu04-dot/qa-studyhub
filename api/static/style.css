@@ -218,3 +218,17 @@ pre:has(.try-btn) { padding-top: 38px; }
 .file { font-size: 12px; background: var(--accent-soft); border-radius: 6px; padding: 3px 6px; margin: 3px 0; }
 .method-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
 .method-grid .card h3 { margin-top: 0; }
+
+/* ---------- recall score ---------- */
+.result { margin-top: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; animation: pop .3s ease; }
+.score-head { display: flex; gap: 14px; align-items: center; }
+.score-num { font-size: 34px; font-weight: 800; min-width: 86px; text-align: center; border-radius: 12px; padding: 4px 8px; }
+.score-num.good { color: #16a34a; background: var(--ok-soft); }
+.score-num.mid { color: #d97706; background: var(--warn-soft); }
+.score-num.low { color: #dc2626; background: var(--bad-soft); }
+.score-bar { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 10px 0; }
+.score-bar span { display: block; height: 100%; transition: width .6s ease; }
+.score-bar .good { background: #16a34a; } .score-bar .mid { background: #f59e0b; } .score-bar .low { background: #dc2626; }
+.kp { padding: 8px 12px; border-radius: 10px; margin-top: 8px; font-size: 15px; }
+.kp ul { margin: 4px 0 0; padding-left: 20px; }
+.kp.ok { background: var(--ok-soft); } .kp.miss { background: var(--bad-soft); }

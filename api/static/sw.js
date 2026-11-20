@@ -1,7 +1,7 @@
 // QA StudyHub service worker: makes the site installable and usable with a weak connection.
 // Pages: network first (always fresh data), fall back to the last saved copy, then an offline page.
 // Static files (CSS, JS, icons): served from cache instantly, refreshed in the background (stale-while-revalidate).
-const VERSION = 'studyhub-v2';
+const VERSION = 'studyhub-v3';
 const STATIC = ['/static/style.css', '/static/runner.js', '/static/viz.js', '/static/sample_db.sql',
   '/static/icons/icon-192.png', '/offline'];
 
